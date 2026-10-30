@@ -103,6 +103,9 @@ Rules:
   client, priority, owner, workstream, and date questions.
 - When returning individual tracker records, include is_sample so the final answer can disclose
   that seeded illustrative rows are examples, not verified client commitments.
+- For aggregate reports, include both SUM(is_sample) AS sample_record_count and
+  SUM(CASE WHEN is_sample = 0 THEN 1 ELSE 0 END) AS live_record_count when applicable,
+  so the final answer can distinguish illustrative examples from real records.
 - Do not invent missing records or columns. If the schema cannot answer, return a safe SELECT
   over available columns; return only SQL.
 - Never generate destructive or data-changing SQL unless the user explicitly requested a change.
