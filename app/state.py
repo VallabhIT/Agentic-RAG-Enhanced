@@ -14,6 +14,7 @@ class AgentState(TypedDict, total=False):
 
     # ---- routing ----
     route: str                   # rag | sql | python | web | direct
+    route_reason: str             # deterministic hint, LLM decision, or safe fallback
 
     # ---- RAG ----
     retrieved_docs: list[str]
