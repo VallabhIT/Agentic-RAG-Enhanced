@@ -30,8 +30,18 @@ def load_demo_documents():
         raise FileNotFoundError(f"Knowledge base file not found: {file_path}")
 
     data = json.loads(file_path.read_text(encoding="utf-8"))
+    import hashlib
+
     return [
-        Document(page_content=item["content"], metadata={"title": item["title"], "id": item["id"], "source": "demo"})
+        Document(
+            page_content=item["content"],
+            metadata={
+                "title": item["title"],
+                "id": item["id"],
+                "source": "demo",
+                "content_hash": hashlib.sha256(item["content"].encode("utf-8")).hexdigest(),
+            },
+        )
         for item in data
     ]
 
@@ -65,13 +75,18 @@ def init_vectorstore(force_rebuild: bool = False):
         _get_vectorstore.cache_clear()
         vectorstore = _get_vectorstore()
 
-    # Do not assume an empty collection: Notion/other source syncs may already have populated it.
+    # Upsert only missing or changed demo documents. This also refreshes seed text
+    # after a project knowledge-base update without rebuilding other source vectors.
     docs = load_demo_documents()
     demo_ids = [str(d.metadata["id"]) for d in docs]
-    existing_ids = set(vectorstore.get(ids=demo_ids).get("ids") or [])
-    missing = [doc for doc in docs if str(doc.metadata["id"]) not in existing_ids]
-    if missing:
-        vectorstore.add_documents(missing, ids=[str(d.metadata["id"]) for d in missing])
+    existing = vectorstore.get(ids=demo_ids, include=["metadatas"])
+    existing_meta = dict(zip(existing.get("ids") or [], existing.get("metadatas") or []))
+    changed = [
+        doc for doc in docs
+        if existing_meta.get(str(doc.metadata["id"]), {}).get("content_hash") != doc.metadata["content_hash"]
+    ]
+    if changed:
+        vectorstore.add_documents(changed, ids=[str(d.metadata["id"]) for d in changed])
     return vectorstore
 
 
@@ -137,53 +152,141 @@ def is_dangerous_sql(sql: str) -> bool:
 
 
 def ensure_demo_db() -> Path:
-    if SQLITE_DB_PATH.exists():
-        return SQLITE_DB_PATH
-    SQLITE_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(SQLITE_DB_PATH))
+    """Create the simple SQLite client-deliverables table and seed illustrative records once."""
+    db_path = SQLITE_DB_PATH
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(db_path))
     try:
-        cur = conn.cursor()
-        cur.execute("CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT, city TEXT, spend REAL)")
-        cur.executemany(
-            "INSERT INTO customers (name, city, spend) VALUES (?, ?, ?)",
-            [("Alice", "New York", 2500), ("Bob", "Boston", 1800), ("Charlie", "Chicago", 3200)],
-        )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS client_deliverables (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client TEXT NOT NULL,
+                project TEXT NOT NULL,
+                deliverable TEXT NOT NULL,
+                workstream TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                status TEXT NOT NULL CHECK(status IN
+                    ('Not Started', 'In Progress', 'Blocked', 'In Review', 'Delivered')),
+                priority TEXT NOT NULL CHECK(priority IN ('Critical', 'High', 'Medium', 'Low')),
+                due_date TEXT,
+                progress_pct INTEGER NOT NULL DEFAULT 0 CHECK(progress_pct BETWEEN 0 AND 100),
+                blocker TEXT NOT NULL DEFAULT '',
+                next_action TEXT NOT NULL DEFAULT '',
+                last_update TEXT,
+                is_sample INTEGER NOT NULL DEFAULT 1 CHECK(is_sample IN (0, 1)),
+                UNIQUE(client, project, deliverable)
+            )
+        """)
+        count = conn.execute("SELECT COUNT(*) FROM client_deliverables").fetchone()[0]
+        if count == 0:
+            seed_file = DATA_DIR / "client_deliverables.json"
+            if seed_file.exists():
+                seed_rows = json.loads(seed_file.read_text(encoding="utf-8"))
+                conn.executemany(
+                    """
+                    INSERT OR IGNORE INTO client_deliverables
+                    (client, project, deliverable, workstream, owner, status, priority,
+                     due_date, progress_pct, blocker, next_action, last_update, is_sample)
+                    VALUES
+                    (:client, :project, :deliverable, :workstream, :owner, :status, :priority,
+                     :due_date, :progress_pct, :blocker, :next_action, :last_update, 1)
+                    """,
+                    seed_rows,
+                )
         conn.commit()
     finally:
         conn.close()
-    return SQLITE_DB_PATH
+    return db_path
 
 
 def get_schema() -> str:
-    """Return CREATE statements for every table, for use in the SQL-generation prompt."""
+    """Expose only the real client-deliverables table to the SQL generator."""
     db_path = ensure_demo_db()
     conn = sqlite3.connect(db_path.as_uri() + "?mode=ro", uri=True)
     try:
-        rows = conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type IN ('table','view') AND sql IS NOT NULL"
-        ).fetchall()
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='client_deliverables'"
+        ).fetchone()
     finally:
         conn.close()
-    return "\n".join(r[0] for r in rows) or "(no tables)"
+    return row[0] if row else "(client_deliverables table not available)"
+
+
+def route_hint(query: str) -> Optional[str]:
+    """Deterministically route obvious requests; leave ambiguous intent to the LLM router."""
+    q = (query or "").lower().strip()
+    if not q:
+        return None
+
+    entity_terms = (
+        "deliverable", "deliverables", "client", "clients", "project", "projects",
+        "workstream", "owner", "owners", "deadline", "due date", "blocker", "blockers",
+    )
+    state_terms = (
+        "status", "blocked", "overdue", "due", "progress", "priority", "assigned",
+        "delivered", "in review", "in progress", "next action",
+    )
+    report_actions = (
+        "show", "list", "find", "which", "who", "how many", "count", "report",
+        "summarize", "display", "compare", "filter", "sort", "track", "give me",
+    )
+    has_entity = any(term in q for term in entity_terms)
+    has_state = any(term in q for term in state_terms)
+    has_action = any(term in q for term in report_actions)
+
+    # Structured delivery questions take precedence over "latest/current" wording.
+    if has_entity and (has_state or has_action):
+        return "sql"
+    if any(phrase in q for phrase in (
+        "what is due", "what's due", "who is assigned", "who owns",
+        "which deliverables", "number of deliverables", "delivery status",
+        "client status", "project status",
+    )):
+        return "sql"
+
+    # Public freshness cues only apply after structured tracker intent has been checked.
+    if any(phrase in q for phrase in (
+        "latest news", "breaking news", "current events", "today's news",
+        "right now", "current price", "latest release", "latest version",
+        "recent announcement", "search the web", "look up online",
+    )):
+        return "web"
+
+    if any(phrase in q for phrase in (
+        "calculate", "compute", "run python", "write a python", "write python",
+        "create a script", "execute python", "plot ", "calculate the",
+    )):
+        return "python"
+
+    return None
 
 
 def run_sql(query: str) -> dict:
-    """Execute ONE statement. Read-only statements use a read-only connection (enforced by SQLite);
-    anything else must have been approved upstream and runs on a writable connection."""
+    """Execute exactly one statement; unapproved read queries use SQLite read-only mode."""
     db_path = ensure_demo_db()
     read_only = not is_dangerous_sql(query)
     uri = db_path.as_uri() + ("?mode=ro" if read_only else "?mode=rw")
     conn = sqlite3.connect(uri, uri=True)
     try:
-        cur = conn.execute(query)
+        cur = conn.execute(query)  # sqlite3 rejects multiple statements in one execute call
         if cur.description:
             columns = [d[0] for d in cur.description]
             rows = [list(r) for r in cur.fetchmany(SQL_MAX_ROWS + 1)]
             truncated = len(rows) > SQL_MAX_ROWS
-            return {"columns": columns, "rows": rows[:SQL_MAX_ROWS], "row_count": min(len(rows), SQL_MAX_ROWS),
-                    "truncated": truncated}
+            return {
+                "columns": columns,
+                "rows": rows[:SQL_MAX_ROWS],
+                "row_count": min(len(rows), SQL_MAX_ROWS),
+                "truncated": truncated,
+            }
         conn.commit()
-        return {"columns": [], "rows": [], "row_count": 0, "rows_affected": cur.rowcount, "truncated": False}
+        return {
+            "columns": [],
+            "rows": [],
+            "row_count": 0,
+            "rows_affected": cur.rowcount,
+            "truncated": False,
+        }
     finally:
         conn.close()
 
