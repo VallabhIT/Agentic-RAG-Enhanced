@@ -44,8 +44,12 @@ def get_connection():
 
 
 def initialize_schema() -> None:
+    # Execute DDL one statement at a time for compatibility with Psycopg's
+    # parameterized/extended query protocol.
     with get_connection() as conn:
-        conn.execute(SCHEMA_SQL)
+        for statement in SCHEMA_SQL.split(";"):
+            if statement.strip():
+                conn.execute(statement)
 
 
 def record_ingestion_sync(
