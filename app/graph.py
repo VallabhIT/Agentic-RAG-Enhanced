@@ -73,17 +73,28 @@ def route_after_rewrite(state: AgentState) -> str:
 
 def router_node(state: AgentState):
     query = state["rewritten_query"]
+
+    # Cheap deterministic guards for obvious intents reduce routing latency and prevent
+    # easy-to-classify tracker/public/computation requests from spending a router LLM call.
+    hinted_route = tools.route_hint(query)
+    if hinted_route in VALID_ROUTES:
+        return {"route": hinted_route, "status": "routed", "route_reason": "deterministic_intent_hint"}
+
     route = None
     try:
-        out = config.get_llm(0.0).invoke(ROUTER_PROMPT.format(query=query))
+        schema = tools.get_schema()
+        out = config.get_llm(0.0).invoke(
+            ROUTER_PROMPT.format(query=query, sql_schema=schema)
+        )
         parsed = extract_json(str(out.content))
         candidate = str((parsed or {}).get("route", "")).strip().lower()
         if candidate in VALID_ROUTES:
             route = candidate
     except Exception:
         route = None
-    # Unknown/unparseable output -> search knowledge (which falls back to web) instead of guessing.
-    return {"route": route or "rag", "status": "routed"}
+    # Malformed/unavailable router output safely falls back to the internal knowledge path.
+    return {"route": route or "rag", "status": "routed",
+            "route_reason": "llm_router" if route else "router_fallback_to_rag"}
 
 
 def route_after_router(state: AgentState) -> str:

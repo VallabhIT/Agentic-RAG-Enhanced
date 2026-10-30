@@ -15,7 +15,7 @@ class Resp:
 class FakeLLM:
     """Dispatches on distinctive phrases in each prompt and records every call."""
 
-    def __init__(self, route="rag", judge=None, rewrite=None, sql="SELECT name FROM customers WHERE spend > 2000",
+    def __init__(self, route="rag", judge=None, rewrite=None, sql="SELECT deliverable FROM client_deliverables WHERE progress_pct > 50",
                  code="print(2 + 2)"):
         self.route, self.judge = route, list(judge or [])
         self.rewrite, self.sql, self.code = rewrite, sql, code
@@ -23,21 +23,21 @@ class FakeLLM:
 
     def invoke(self, prompt):
         p = str(prompt)
-        if "You normalize user requests" in p:
+        if "You normalize the latest user request" in p:
             kind, out = "rewrite", self.rewrite or p.split("Latest user message:")[1].strip()
-        elif "routing classifier" in p:
+        elif "route classifier" in p:
             kind, out = "router", '{"route": "%s"}' % self.route
-        elif "relevance judge" in p:
+        elif "evidence-sufficiency judge" in p:
             kind = "judge"
             rel = self.judge.pop(0) if self.judge else False
             out = '{"relevant": %s, "score": %s, "reason": "r"}' % (str(rel).lower(), 0.9 if rel else 0.1)
-        elif "improved search query" in p:
+        elif "better retrieval query" in p:
             kind, out = "refine", "refined query %d" % sum(1 for k, _ in self.calls if k == "refine")
         elif "expert SQLite analyst" in p:
             kind, out = "sql_gen", "```sql\n%s\n```" % self.sql
         elif "expert Python programmer" in p:
             kind, out = "py_gen", "```python\n%s\n```" % self.code
-        elif "friendly, concise AI assistant" in p:
+        elif "friendly and concise assistant" in p:
             kind, out = "direct", "Hello! How can I help?"
         elif "final reasoning step" in p:
             kind, out = "finalize", "FINAL ANSWER"
@@ -62,8 +62,8 @@ def setup(monkeypatch):
         monkeypatch.setattr(tools, "retrieve_docs", lambda q, k=5: rec["retrieve"].append(q) or ["policy doc text"])
         monkeypatch.setattr(tools, "web_search", lambda q, max_results=5: rec["web"].append(q) or
                             [{"title": "T", "href": "https://x.test", "body": "snippet", "id": "abc123"}])
-        monkeypatch.setattr(tools, "get_schema", lambda: "CREATE TABLE customers (id, name, city, spend)")
-        monkeypatch.setattr(tools, "run_sql", lambda q: rec["sql"].append(q) or {"columns": ["name"], "rows": [["Alice"]]})
+        monkeypatch.setattr(tools, "get_schema", lambda: "CREATE TABLE client_deliverables (client, project, deliverable, status, priority, progress_pct)")
+        monkeypatch.setattr(tools, "run_sql", lambda q: rec["sql"].append(q) or {"columns": ["deliverable"], "rows": [["API Integration Endpoints"]]})
         monkeypatch.setattr(tools, "run_python", lambda c: rec["python"].append(c) or
                             {"stdout": "4\n", "stderr": "", "returncode": 0, "timed_out": False})
         return llm, rec, build_graph()
@@ -132,17 +132,17 @@ def test_finalize_receives_full_raw_web_results(setup):
     out = invoke(g, "latest news on openai")
     fp = llm.prompt("finalize")
     assert "abc123" in fp and "https://x.test" in fp       # full structure given to the LLM
-    assert "Do NOT dump or" in fp                          # ...with instruction to consolidate
+    assert "Ground claims in the actual tool output" in fp                          # ...with instruction to consolidate
     assert out["final_answer"] == "FINAL ANSWER"           # user sees LLM output, not raw dict
 
 
 # ---- 4. generated SQL / Python executed instead of the NL query ----------------
 def test_sql_is_generated_stored_and_executed(setup):
-    llm, rec, g = setup(route="sql", sql="SELECT name FROM customers WHERE spend > 2000")
-    out = invoke(g, "which customers spent more than 2000?")
-    assert out["sql_query"] == "SELECT name FROM customers WHERE spend > 2000"
+    llm, rec, g = setup(route="sql", sql="SELECT deliverable FROM client_deliverables WHERE progress_pct > 50")
+    out = invoke(g, "which deliverables have progress above 50 percent?")
+    assert out["sql_query"] == "SELECT deliverable FROM client_deliverables WHERE progress_pct > 50"
     assert rec["sql"] == [out["sql_query"]]                # NOT the natural-language question
-    assert out["sql_result"]["rows"] == [["Alice"]]
+    assert out["sql_result"]["rows"] == [["API Integration Endpoints"]]
     assert out["approval_status"] == "not_required"
 
 
@@ -155,10 +155,10 @@ def test_python_is_generated_stored_and_executed(setup):
 
 # ---- 3. approval state: no restart, no re-check ----------------------------------
 def test_sql_approval_resumes_without_restart(setup, monkeypatch):
-    llm, rec, g = setup(route="sql", sql="DELETE FROM customers WHERE id = 1")
+    llm, rec, g = setup(route="sql", sql="DELETE FROM client_deliverables WHERE id = 1")
     monkeypatch.setattr("builtins.input", lambda *_: "y")
-    out = run_turn(g, "delete customer 1", [])
-    assert rec["sql"] == ["DELETE FROM customers WHERE id = 1"]
+    out = run_turn(g, "delete a deliverable record", [])
+    assert rec["sql"] == ["DELETE FROM client_deliverables WHERE id = 1"]
     assert llm.kinds().count("rewrite") == 1               # graph did NOT start over
     assert llm.kinds().count("router") == 1
     assert llm.kinds().count("sql_gen") == 1               # SQL not regenerated
@@ -175,7 +175,7 @@ def test_python_approval_resumes_without_restart(setup, monkeypatch):
 
 
 def test_denied_approval_executes_nothing(setup, monkeypatch):
-    llm, rec, g = setup(route="sql", sql="DROP TABLE customers")
+    llm, rec, g = setup(route="sql", sql="DROP TABLE client_deliverables")
     monkeypatch.setattr("builtins.input", lambda *_: "n")
     out = run_turn(g, "drop it", [])
     assert rec["sql"] == [] and "denied" in out["final_answer"]
@@ -184,7 +184,7 @@ def test_denied_approval_executes_nothing(setup, monkeypatch):
 def test_execute_node_refuses_tampered_payload(setup):
     llm, rec, g = setup()
     st = new_state("x")
-    st.update(route="sql", sql_query="DROP TABLE customers", pending_action="sql",
+    st.update(route="sql", sql_query="DROP TABLE client_deliverables", pending_action="sql",
               pending_payload="SELECT 1", approval_status="granted")
     out = g.invoke(st)
     assert rec["sql"] == [] and "Blocked" in (out["error"] or "")
@@ -199,7 +199,7 @@ def test_garbage_router_output_defaults_to_rag_not_direct(setup):
 
 def test_prompts_format_without_keyerror():
     from app import prompts
-    prompts.ROUTER_PROMPT.format(query="q")
+    prompts.ROUTER_PROMPT.format(query="q", sql_schema="CREATE TABLE client_deliverables (...)")
     prompts.JUDGE_PROMPT.format(query="q", docs="d")
 
 
@@ -220,10 +220,11 @@ def test_python_safety_classifier():
 
 def test_real_sql_and_python_execution(tmp_path, monkeypatch):
     monkeypatch.setattr(tools, "SQLITE_DB_PATH", tmp_path / "t.db")
-    res = tools.run_sql("SELECT name FROM customers WHERE spend > 2000 ORDER BY name")
-    assert res["rows"] == [["Alice"], ["Charlie"]]
+    res = tools.run_sql("SELECT deliverable FROM client_deliverables WHERE client = 'Acme Retail' ORDER BY deliverable")
+    assert len(res["rows"]) == 3
+    assert all(row[0] for row in res["rows"])
     with pytest.raises(Exception):                         # read-only connection blocks writes
-        tools.run_sql("SELECT 1; DELETE FROM customers")
+        tools.run_sql("SELECT 1; DELETE FROM client_deliverables")
     monkeypatch.setenv("SECRET_KEY", "hunter2")
     r = tools.run_python("import os\nprint(os.environ.get('SECRET_KEY'))")
     assert r["stdout"].strip() == "None"                   # parent env is not leaked
