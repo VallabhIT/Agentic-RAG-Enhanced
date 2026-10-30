@@ -65,7 +65,7 @@ Use structure-aware chunking first. A Notion heading defines a semantic section;
 
 Group adjacent paragraphs, list items, quotes, callouts, and code blocks that explain one idea. Keep a table's header and rows together when possible. For an oversized section, split at blank-line/paragraph/list boundaries; split a single oversized paragraph by sentences; use hard character slicing only as a last fallback. The script defaults to about 2,800 characters (roughly 700 tokens, depending on language/model) with 320 characters of overlap. Tune with retrieval evaluation rather than treating these numbers as universal constants.
 
-Semantic chunking is the fallback, not the first operation. Notion already supplies useful structure; discovering boundaries from embeddings before respecting headings would discard author intent. Very short sections should remain intact.
+The implemented fallback is paragraph- and sentence-based size splitting, not embedding-based semantic-boundary detection. Notion already supplies useful structure; adding another semantic segmentation/embedding pass before respecting headings would add complexity without demonstrated value. Add semantic chunking only if retrieval evaluation shows that structurally weak pages remain a measurable problem. Very short sections should remain intact.
 
 ## Chroma metadata
 
