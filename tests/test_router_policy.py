@@ -36,6 +36,7 @@ def test_current_tracker_query_is_sql_not_web():
 
 def test_agent_concept_query_is_not_sql():
     assert tools.route_hint("Explain how an agent should handle a blocked tool call") is None
+    assert tools.route_hint("What does a blocked deliverable mean in a project tracker?") is None
     assert tools.route_hint("How do I evaluate RAG faithfulness and citation coverage?") is None
 
 
