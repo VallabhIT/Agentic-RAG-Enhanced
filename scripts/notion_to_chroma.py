@@ -366,7 +366,7 @@ def sync_page(vectorstore: Any, page: dict[str, Any], segments: list[Segment],
 
     docs, ids = [], []
     for index, (content, section, block_ids) in enumerate(chunks):
-        key = "notion-" + digest(f"{page_id}|{section}|{digest(content)}")[:40]
+        key = "notion-" + digest(f"{page_id}|{section}|{block_ids}|{index}|{digest(content)}")[:40]
         metadata = {
             "source": "notion", "content_type": "documentation",
             "notion_page_id": page_id, "title": title, "section": section,
@@ -382,6 +382,22 @@ def sync_page(vectorstore: Any, page: dict[str, Any], segments: list[Segment],
     stale = sorted(set(old_ids) - set(ids))
     if stale:
         vectorstore.delete(ids=stale)
+
+    # PostgreSQL is optional. When configured, persist a relational sync checkpoint
+    # after the Chroma upsert succeeds; keep ingestion working if the DB is offline.
+    if os.getenv("DATABASE_URL"):
+        try:
+            from app.postgres_store import record_ingestion_sync
+            record_ingestion_sync(
+                source="notion",
+                item_id=page_id,
+                content_hash=page_hash,
+                chunk_count=len(ids),
+                last_edited_time=last_edited or None,
+            )
+        except Exception as exc:
+            LOG.warning("Chroma sync succeeded, but PostgreSQL checkpoint failed: %s", exc)
+
     return {"page_id": page_id, "title": title, "status": "synced",
             "chunks": len(ids), "stale_removed": len(stale)}
 
