@@ -220,7 +220,7 @@ def route_hint(query: str) -> Optional[str]:
 
     # Definition/explanation phrasing is knowledge work, even when it mentions
     # tracker vocabulary such as "blocked", "priority", or "deliverable".
-    if re.match(r"^(explain|define|describe|what does .+ mean|what is (?:a|an) .+|how does .+ work)\\b", q):
+    if re.match(r"^(explain|define|describe|what does .+ mean|what is (?:a|an) .+|how does .+ work)\b", q):
         return None
 
     entity_terms = (
