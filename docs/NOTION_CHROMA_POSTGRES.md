@@ -84,7 +84,7 @@ Brief comparison:
 - PostgreSQL: durable relational database, constraints, transactions, indexing, JSONB, concurrent access, and first-class Docker support. Best fit for structured project data and operational state.
 - MySQL/MariaDB: also capable relational databases; PostgreSQL is the simpler recommendation here because it fits the use case and the repository has no existing MySQL dependency.
 
-The Compose service is in compose.postgres.yaml. Start it:
+The Compose service is in compose.postgres.yaml. It uses the official PostgreSQL 18 image and mounts the named volume at /var/lib/postgresql, the current PG18 image data-volume target (PG18 uses a version-specific PGDATA subdirectory). Start it:
 
     docker compose -f compose.postgres.yaml up -d
     docker compose -f compose.postgres.yaml ps
