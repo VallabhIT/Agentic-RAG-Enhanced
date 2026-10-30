@@ -5,6 +5,8 @@ import json
 import os
 from typing import Any
 
+from dotenv import load_dotenv
+
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS ingestion_sync (
@@ -32,7 +34,8 @@ CREATE TABLE IF NOT EXISTS agent_runs (
 
 
 def get_connection():
-    """Open a Psycopg 3 connection using DATABASE_URL."""
+    """Open a Psycopg 3 connection using DATABASE_URL from the local environment."""
+    load_dotenv()
     dsn = os.getenv("DATABASE_URL")
     if not dsn:
         raise RuntimeError("DATABASE_URL is not configured")
