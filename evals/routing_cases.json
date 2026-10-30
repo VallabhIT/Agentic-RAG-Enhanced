@@ -8,6 +8,10 @@
     "expected_route": "rag"
   },
   {
+    "query": "What does a blocked deliverable mean in a project tracker?",
+    "expected_route": "rag"
+  },
+  {
     "query": "How should I evaluate retrieval faithfulness and citation coverage?",
     "expected_route": "rag"
   },
