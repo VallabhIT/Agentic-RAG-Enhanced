@@ -31,7 +31,7 @@ def load_demo_documents():
 
     data = json.loads(file_path.read_text(encoding="utf-8"))
     return [
-        Document(page_content=item["content"], metadata={"title": item["title"], "id": item["id"]})
+        Document(page_content=item["content"], metadata={"title": item["title"], "id": item["id"], "source": "demo"})
         for item in data
     ]
 
@@ -57,7 +57,7 @@ def _get_vectorstore():
 
 
 def init_vectorstore(force_rebuild: bool = False):
-    """Create/populate the vector store once; reuse the cached instance afterwards."""
+    """Ensure demo documents exist without overwriting other sources in the shared collection."""
     vectorstore = _get_vectorstore()
 
     if force_rebuild:
@@ -65,17 +65,30 @@ def init_vectorstore(force_rebuild: bool = False):
         _get_vectorstore.cache_clear()
         vectorstore = _get_vectorstore()
 
-    # Populate whenever the collection is empty (not just when the directory is missing).
-    if not vectorstore.get(limit=1).get("ids"):
-        docs = load_demo_documents()
-        vectorstore.add_documents(docs, ids=[d.metadata["id"] for d in docs])
+    # Do not assume an empty collection: Notion/other source syncs may already have populated it.
+    docs = load_demo_documents()
+    demo_ids = [str(d.metadata["id"]) for d in docs]
+    existing_ids = set(vectorstore.get(ids=demo_ids).get("ids") or [])
+    missing = [doc for doc in docs if str(doc.metadata["id"]) not in existing_ids]
+    if missing:
+        vectorstore.add_documents(missing, ids=[str(d.metadata["id"]) for d in missing])
     return vectorstore
 
 
 def retrieve_docs(query: str, k: int = 5) -> List[str]:
+    """Return retrieved text with source provenance while retaining the current string contract."""
     vectorstore = init_vectorstore()
     results = vectorstore.similarity_search(query, k=k)
-    return [doc.page_content for doc in results]
+    formatted = []
+    for doc in results:
+        metadata = doc.metadata or {}
+        source = metadata.get("source", "local")
+        title = metadata.get("title", "")
+        section = metadata.get("section", "")
+        url = metadata.get("url", "")
+        citation = " | ".join(str(x) for x in (source, title, section, url) if x)
+        formatted.append((f"Source: {citation}\n\n" if citation else "") + doc.page_content)
+    return formatted
 
 
 # --------------------------------------------------------------------------- #
@@ -99,7 +112,6 @@ def web_search(query: str, max_results: int = 5) -> List[Dict[str, Any]]:
 # SQL
 # --------------------------------------------------------------------------- #
 
-# Anything that can change data/schema/connection state. Read-only = single SELECT/WITH without these.
 _WRITE_KEYWORDS = re.compile(
     r"\b(DROP|DELETE|UPDATE|ALTER|INSERT|REPLACE|CREATE|TRUNCATE|EXEC|EXECUTE|ATTACH|DETACH|"
     r"PRAGMA|VACUUM|REINDEX|LOAD_EXTENSION)\b",
@@ -163,7 +175,7 @@ def run_sql(query: str) -> dict:
     uri = db_path.as_uri() + ("?mode=ro" if read_only else "?mode=rw")
     conn = sqlite3.connect(uri, uri=True)
     try:
-        cur = conn.execute(query)  # sqlite3 rejects multi-statement strings itself
+        cur = conn.execute(query)
         if cur.description:
             columns = [d[0] for d in cur.description]
             rows = [list(r) for r in cur.fetchmany(SQL_MAX_ROWS + 1)]
@@ -199,8 +211,7 @@ def detect_dangerous_python(code: str) -> bool:
     try:
         parsed = ast.parse(code, mode="exec")
     except SyntaxError:
-        return False  # cannot execute; the runner will report the SyntaxError
-
+        return False
     for node in ast.walk(parsed):
         if isinstance(node, ast.Import):
             if any(alias.name.split(".")[0] not in SAFE_IMPORTS for alias in node.names):
