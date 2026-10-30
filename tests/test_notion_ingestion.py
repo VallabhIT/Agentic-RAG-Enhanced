@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from scripts.notion_to_chroma import (
     Segment,
-    chunk_segments,
+    make_chunks,
     markdown_segments,
     mcp_snapshot_pages,
     sync_page,
@@ -48,13 +48,14 @@ def test_mcp_snapshot_adapter_reads_workspace_response_shape():
     assert len(pages) == 1
     assert pages[0]["title"] == "Agentic RAG Notes"
     assert pages[0]["id"] == "40913ff48027813f8a87e67b0c490e7d"
+    assert pages[0]["properties"]["title"] == "Agentic RAG Notes"
     assert "Chunk by Notion headings." in pages[0]["body_markdown"]
 
 
 def test_markdown_parser_preserves_heading_context():
     segments = markdown_segments("# RAG\nFirst paragraph.\n\n## Chunking\nChunk by headings.")
     assert [segment.path for segment in segments] == [["RAG"], ["RAG", "Chunking"]]
-    chunks = chunk_segments("Notes", segments, max_chars=1000, overlap_chars=0)
+    chunks = make_chunks("Notes", segments, max_chars=1000, overlap_chars=0)
     assert "Section: RAG" in chunks[0][0]
     assert "Section: RAG > Chunking" in chunks[1][0]
 
@@ -89,7 +90,7 @@ def test_sync_page_upserts_stable_chunks_and_skips_unchanged_page():
 
 def test_oversized_sections_split_without_losing_text():
     text = "Sentence one. " * 80
-    chunks = chunk_segments("Long page", [Segment(path=["Long"], parts=[text])],
+    chunks = make_chunks("Long page", [Segment(path=["Long"], parts=[text])],
                             max_chars=500, overlap_chars=40)
     assert len(chunks) > 1
     joined = " ".join(chunk[0] for chunk in chunks)
