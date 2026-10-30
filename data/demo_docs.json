@@ -1,27 +1,7 @@
 [
-  {
-    "id": "doc1",
-    "title": "Product Overview",
-    "content": "Our product is an AI assistant platform for enterprises. It supports document retrieval, SQL analysis, Python execution, and web search. The system is built for secure internal knowledge access and reporting."
-  },
-  {
-    "id": "doc2",
-    "title": "Company Policy",
-    "content": "Employees should check internal documentation before making product claims. For sensitive data tasks, approval is required before executing SQL or Python code that touches production systems."
-  },
-  {
-    "id": "doc3",
-    "title": "Data Warehouse Guide",
-    "content": "The analytics database contains customers, orders, products, and support tickets. Use read-only queries for data exploration. Avoid destructive statements like DROP, DELETE, ALTER, or UPDATE without approval."
-  },
-  {
-    "id": "doc4",
-    "title": "AI Security Rules",
-    "content": "The platform blocks dangerous operations such as os.system, subprocess, eval, exec, and direct file writes outside the sandbox. Always ask for approval before running high-risk scripts."
-  },
-  {
-    "id": "doc5",
-    "title": "Knowledge Base FAQ",
-    "content": "The system can answer questions using private documents, search the web when necessary, and route to SQL or Python when the task requires computation or data access."
-  }
+  {"id":"doc1","title":"Agentic Workflow","content":"An agentic assistant is a bounded workflow: interpret a request, select a capability, execute under policy, validate the result, and return grounded evidence. Use explicit state transitions, typed inputs and outputs, timeouts, bounded retries, and approval for high-risk actions."},
+  {"id":"doc2","title":"RAG Retrieval","content":"A robust RAG path rewrites the query without changing intent, retrieves candidate passages, retains provenance, judges answer sufficiency, and refines within a small retry budget. Similarity alone is not evidence. If evidence remains insufficient, use the configured fallback or state that the knowledge base does not answer."},
+  {"id":"doc3","title":"Evaluation and Observability","content":"Measure route accuracy, retrieval Recall@k and MRR where labels exist, answer faithfulness, citation coverage, SQL safety, tool success, fallback correctness, p50 and p95 latency, and token cost. Maintain a small versioned golden query set and run offline tests for routing, guards, parsing, and bounded retry behavior."},
+  {"id":"doc4","title":"Agent Failure Modes","content":"Common failures include wrong routing, empty or irrelevant retrieval, stale chunks, malformed model output, SQL syntax errors, tool timeouts, rate limits, duplicate side effects, and prompt injection. Use typed validation, bounded retries, backoff for transient errors, idempotency for writes, read-only SQL by default, timeouts, safe fallbacks, and useful traces."},
+  {"id":"doc5","title":"Cost and Latency Optimisation","content":"Keep fast paths cheap: bypass unnecessary LLM routing for obvious requests, cache embeddings and vector-store clients, retrieve a small top-k, cap context, skip unchanged document embeddings using content hashes, choose the lowest-cost model that passes evaluations, and stop retries when sufficient evidence is found. Measure before optimising."}
 ]
