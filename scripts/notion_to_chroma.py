@@ -252,14 +252,21 @@ def mcp_snapshot_pages(payload: Any) -> list[dict[str, Any]]:
         title = wrapped.get("title") or item.get("title") or "Untitled Notion page"
         match = re.search(r"<content>(.*?)</content>", text, re.S)
         body = match.group(1) if match else text
+        properties_match = re.search(r"<properties>(.*?)</properties>", text, re.S)
+        try:
+            page_properties = json.loads(properties_match.group(1).strip()) if properties_match else {}
+        except (ValueError, TypeError):
+            page_properties = {}
         body = re.sub(r"<database\b[^>]*>.*?</database>", "\n", body, flags=re.S)
         body = re.sub(r"</?(?:toggle|quote|callout|content|page|p)(?:\s+[^>]*)?>", "\n", body)
         body = re.sub(r"<[^>]+>", "", body)
         pages.append({
             "id": str(page_id), "title": str(title), "url": str(url),
+            "properties": page_properties,
             "body_markdown": html.unescape(body).strip(),
             "last_edited_time": wrapped.get("page_last_edited_at") or "",
         })
+
     return pages
 
 
