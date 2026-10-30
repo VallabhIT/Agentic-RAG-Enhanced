@@ -111,7 +111,15 @@ python -m scripts.notion_to_chroma --page-ids YOUR_NOTION_PAGE_ID
 
 This writes explanatory page chunks into the existing Chroma `knowledge_base` collection. Do not pass the client-deliverables database rows as RAG documents.
 
-## Offline tests
+## Evaluation and offline tests
+
+Run the live routing evaluation after configuring the existing LLM provider. The report includes route accuracy, per-route confusion counts, latency percentiles, invalid outputs, and the fraction of calls avoided by deterministic hints:
+
+```bash
+python -m scripts.evaluate_routing
+```
+
+This evaluates routing only; it does not claim to measure retrieval quality or answer faithfulness. The offline tests cover deterministic hints and the graph's retry, fallback, approval, SQL safety, and Python isolation behavior:
 
 ```bash
 python -m pytest tests -q
