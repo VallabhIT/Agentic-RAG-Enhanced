@@ -47,6 +47,7 @@ def test_mcp_snapshot_adapter_reads_workspace_response_shape():
     pages = mcp_snapshot_pages(wrapper)
     assert len(pages) == 1
     assert pages[0]["title"] == "Agentic RAG Notes"
+    assert pages[0]["id"] == "40913ff48027813f8a87e67b0c490e7d"
     assert "Chunk by Notion headings." in pages[0]["body_markdown"]
 
 
