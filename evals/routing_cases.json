@@ -1,0 +1,46 @@
+[
+  {
+    "query": "Explain how query rewriting and routing work in the existing agent.",
+    "expected_route": "rag"
+  },
+  {
+    "query": "What failure modes should an agentic RAG pipeline handle?",
+    "expected_route": "rag"
+  },
+  {
+    "query": "How should I evaluate retrieval faithfulness and citation coverage?",
+    "expected_route": "rag"
+  },
+  {
+    "query": "Show all blocked deliverables.",
+    "expected_route": "sql"
+  },
+  {
+    "query": "Which deliverables are due this week for Northstar Logistics?",
+    "expected_route": "sql"
+  },
+  {
+    "query": "How many deliverables are in review?",
+    "expected_route": "sql"
+  },
+  {
+    "query": "Who owns the Role-Based Access Control deliverable?",
+    "expected_route": "sql"
+  },
+  {
+    "query": "What is the latest news about LangGraph?",
+    "expected_route": "web"
+  },
+  {
+    "query": "Calculate the average progress percentage across all deliverables.",
+    "expected_route": "sql"
+  },
+  {
+    "query": "Compute precision, recall, and F1 for TP=42, FP=8, FN=5.",
+    "expected_route": "python"
+  },
+  {
+    "query": "Hi there",
+    "expected_route": "direct"
+  }
+]
