@@ -120,7 +120,7 @@ Initialize the schema and record a checkpoint:
         last_edited_time="2026-10-30T16:35:16.514Z",
     )
 
-The helper is optional; configure DATABASE_URL only when PostgreSQL is running. The existing generated-SQL agent branch still uses the read-only/write-gated SQLite demo database in data/demo.db. This incremental change does not silently replace that execution path. When you begin storing business records in PostgreSQL, connect that branch through a separate, explicitly configured SQL adapter and preserve its approval/read-only protections.
+The helper is optional; configure DATABASE_URL only when PostgreSQL is running. The Notion sync script automatically writes a page-level checkpoint to ingestion_sync after successful Chroma upserts when DATABASE_URL is set; a checkpoint failure is logged without undoing the Chroma write. The existing generated-SQL agent branch still uses the read-only/write-gated SQLite demo database in data/demo.db. This incremental change does not silently replace that execution path. When you begin storing business records in PostgreSQL, connect that branch through a separate, explicitly configured SQL adapter and preserve its approval/read-only protections.
 
 ## Architecture boundary
 
