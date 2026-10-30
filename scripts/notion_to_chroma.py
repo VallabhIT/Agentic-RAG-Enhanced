@@ -243,7 +243,12 @@ def mcp_snapshot_pages(payload: Any) -> list[dict[str, Any]]:
         if not text:
             continue
         url = wrapped.get("url") or item.get("url") or ""
-        page_id = wrapped.get("id") or item.get("id") or page_id_from_url(url)
+        raw_id = str(wrapped.get("id") or item.get("id") or "")
+        # The connected MCP wrapper currently supplies a page URL in its id field.
+        # Notion's own API IDs are stable UUIDs; parse the path component from this
+        # observed wrapper shape rather than persisting a mutable URL as the ID.
+        page_id = page_id_from_url(raw_id) if raw_id.startswith("http") else raw_id
+        page_id = page_id or page_id_from_url(url)
         title = wrapped.get("title") or item.get("title") or "Untitled Notion page"
         match = re.search(r"<content>(.*?)</content>", text, re.S)
         body = match.group(1) if match else text
