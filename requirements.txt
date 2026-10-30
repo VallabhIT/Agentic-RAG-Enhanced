@@ -10,5 +10,4 @@ ddgs>=9.0.0
 python-dotenv>=1.0.1
 pydantic>=2.7.0
 requests>=2.32.3
-psycopg[binary]>=3.2.1
 pytest>=8.0.0
