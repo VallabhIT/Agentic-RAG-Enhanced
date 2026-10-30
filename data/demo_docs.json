@@ -1,0 +1,27 @@
+[
+  {
+    "id": "doc1",
+    "title": "Product Overview",
+    "content": "Our product is an AI assistant platform for enterprises. It supports document retrieval, SQL analysis, Python execution, and web search. The system is built for secure internal knowledge access and reporting."
+  },
+  {
+    "id": "doc2",
+    "title": "Company Policy",
+    "content": "Employees should check internal documentation before making product claims. For sensitive data tasks, approval is required before executing SQL or Python code that touches production systems."
+  },
+  {
+    "id": "doc3",
+    "title": "Data Warehouse Guide",
+    "content": "The analytics database contains customers, orders, products, and support tickets. Use read-only queries for data exploration. Avoid destructive statements like DROP, DELETE, ALTER, or UPDATE without approval."
+  },
+  {
+    "id": "doc4",
+    "title": "AI Security Rules",
+    "content": "The platform blocks dangerous operations such as os.system, subprocess, eval, exec, and direct file writes outside the sandbox. Always ask for approval before running high-risk scripts."
+  },
+  {
+    "id": "doc5",
+    "title": "Knowledge Base FAQ",
+    "content": "The system can answer questions using private documents, search the web when necessary, and route to SQL or Python when the task requires computation or data access."
+  }
+]
