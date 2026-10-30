@@ -209,7 +209,7 @@ def get_schema() -> str:
         ).fetchone()
     finally:
         conn.close()
-    return row[0] if row else "(client_deliverables table not available)"
+    return ("-- Seeded starter rows are illustrative only (is_sample=1), not verified client commitments.\n" + row[0]) if row else "(client_deliverables table not available)"
 
 
 def route_hint(query: str) -> Optional[str]:
