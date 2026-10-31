@@ -1,0 +1,32 @@
+[
+  {
+    "id": "rag-agentic-hybrid-retrieval",
+    "input": "Why is hybrid retrieval useful for this project when semantic search can miss exact numbers and identifiers?",
+    "expected_output": "Hybrid retrieval combines semantic similarity with lexical matching so paraphrases can be found while exact terms such as years, quantities, units, names, and identifiers remain retrievable.",
+    "expected_sources": ["Agentic RAG — Project Notes & Integration Plan"]
+  },
+  {
+    "id": "rag-grocery-quantity",
+    "input": "How much rice and cooking oil are on my grocery list?",
+    "expected_output": "The grocery list has 5 kg of rice and 2 L of cooking oil.",
+    "expected_sources": ["Grocery Shopping List"]
+  },
+  {
+    "id": "rag-history-1947",
+    "input": "What does my Indian history timeline say happened in 1947?",
+    "expected_output": "The timeline says India and Pakistan became independent states in 1947 and Partition caused mass displacement and communal violence.",
+    "expected_sources": ["Important Events in Indian History"]
+  },
+  {
+    "id": "rag-itinerary-day4",
+    "input": "What is planned for Day 4 of my Himachal itinerary?",
+    "expected_output": "Day 4 is Monday, 4 January: travel from Shimla to Manali via Mandi and Kullu, allowing about 7–9 hours including stops, with the day treated as a transfer day.",
+    "expected_sources": ["Himachal Pradesh Winter Itinerary | 1–8 Jan 2027"]
+  },
+  {
+    "id": "rag-routine-830",
+    "input": "What is in my weekday routine at 8:30 AM?",
+    "expected_output": "At 8:30 AM the routine says to start work, review messages, and choose the top priorities.",
+    "expected_sources": ["Weekday routine"]
+  }
+]

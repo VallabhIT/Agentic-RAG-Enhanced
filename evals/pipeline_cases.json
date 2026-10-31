@@ -1,0 +1,10 @@
+[
+  {"id":"pipeline-grocery","input":"How much rice is on my grocery list?","expected_route":"rag","expected_tool_path":["rag"],"expected_sources":["Grocery Shopping List"]},
+  {"id":"pipeline-history","input":"What happened in 1947 in my Indian history timeline?","expected_route":"rag","expected_tool_path":["rag"],"expected_sources":["Important Events in Indian History"]},
+  {"id":"pipeline-itinerary","input":"What is planned for Day 4 of my Himachal itinerary?","expected_route":"rag","expected_tool_path":["rag"],"expected_sources":["Himachal Pradesh Winter Itinerary | 1–8 Jan 2027"]},
+  {"id":"pipeline-routine","input":"What do I do at 8:30 AM on weekdays?","expected_route":"rag","expected_tool_path":["rag"],"expected_sources":["Weekday routine"]},
+  {"id":"pipeline-deliverables","input":"Show blocked client deliverables.","expected_route":"sql","expected_tool_path":["sql_generate","sql_guard","sql_execute"],"expected_sources":[]},
+  {"id":"pipeline-f1","input":"Calculate F1 when TP=8, FP=2, FN=2.","expected_route":"python","expected_tool_path":["python_generate","python_guard","python_execute"],"expected_sources":[]},
+  {"id":"pipeline-current-web","input":"What is the latest public LangGraph release?","expected_route":"web","expected_tool_path":["web_search"],"expected_sources":[]},
+  {"id":"pipeline-smalltalk","input":"Thanks, that helps!","expected_route":"direct","expected_tool_path":["direct"],"expected_sources":[]}
+]

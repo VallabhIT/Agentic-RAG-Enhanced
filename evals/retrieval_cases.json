@@ -1,0 +1,7 @@
+[
+  {"id":"retrieval-grocery-quantity","query":"How much rice and cooking oil are on my grocery list?","expected_sources":["Grocery Shopping List"]},
+  {"id":"retrieval-history-year","query":"What happened in 1947 in my Indian history timeline?","expected_sources":["Important Events in Indian History"]},
+  {"id":"retrieval-itinerary-day","query":"What is planned for Day 4 of my Himachal itinerary?","expected_sources":["Himachal Pradesh Winter Itinerary | 1–8 Jan 2027"]},
+  {"id":"retrieval-routine-time","query":"What is scheduled at 8:30 AM in my weekday routine?","expected_sources":["Weekday routine"]},
+  {"id":"retrieval-agentic","query":"What are the failure modes and recovery strategies in my Agentic RAG project?","expected_sources":["Agentic RAG — Project Notes & Integration Plan"]}
+]

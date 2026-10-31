@@ -1,22 +1,18 @@
-"""RAG subgraph: retrieve -> judge -> (refine -> retrieve)* -> END.
-
-It does NOT write the final answer. It returns the retrieved documents plus an explicit
-`relevant` verdict; the parent graph decides whether to continue with the documents or fall
-back to web search, and the finalize node writes the user-facing answer.
-"""
+"""RAG subgraph: hybrid retrieve -> judge -> bounded refinement -> END."""
 from functools import lru_cache
 from typing import TypedDict
 
 from langgraph.graph import END, StateGraph
 
-from app import config, tools
+from app import config
+from app.hybrid_retriever import format_retrieved_documents, retrieve_hybrid_documents
 from app.prompts import JUDGE_PROMPT, RAG_REFINE_PROMPT
 from app.utils import extract_json
 
 
 class RAGState(TypedDict, total=False):
-    query: str            # canonical (rewritten) query; relevance is judged against this
-    search_query: str     # query actually sent to the vector store (changes on refinement)
+    query: str
+    search_query: str
     retrieved_docs: list[str]
     judge_score: float
     judge_reason: str
@@ -28,13 +24,11 @@ class RAGState(TypedDict, total=False):
 def judge_docs(query: str, docs: list[str]) -> dict:
     if not docs:
         return {"relevant": False, "score": 0.0, "reason": "No documents were retrieved."}
-
     numbered = "\n---\n".join(f"[Doc {i + 1}] {d}" for i, d in enumerate(docs))
     try:
         result = config.get_llm().invoke(JUDGE_PROMPT.format(query=query, docs=numbered))
     except Exception as exc:
         return {"relevant": False, "score": 0.0, "reason": f"Judge call failed: {exc}"}
-
     parsed = extract_json(str(result.content))
     if not parsed:
         return {"relevant": False, "score": 0.0, "reason": "Could not parse judge output."}
@@ -48,41 +42,32 @@ def judge_docs(query: str, docs: list[str]) -> dict:
 
 def retrieve_node(state: RAGState):
     query = state.get("search_query") or state["query"]
-    docs = tools.retrieve_docs(query, k=config.RAG_TOP_K)
+    docs = format_retrieved_documents(retrieve_hybrid_documents(query, k=config.RAG_TOP_K))
     return {"retrieved_docs": docs, "search_query": query, "status": "retrieved"}
 
 
 def judge_node(state: RAGState):
     result = judge_docs(state["query"], state.get("retrieved_docs", []))
     return {
-        "judge_score": result["score"],
-        "relevant": result["relevant"],
-        "judge_reason": result["reason"],
-        "status": "judged",
+        "judge_score": result["score"], "relevant": result["relevant"],
+        "judge_reason": result["reason"], "status": "judged",
     }
 
 
 def refine_node(state: RAGState):
-    """Produce a *different* search query and count the retry (this is what bounds the loop)."""
     previous = state.get("search_query") or state["query"]
     new_query = previous
     try:
-        out = config.get_llm().invoke(
-            RAG_REFINE_PROMPT.format(
-                query=state["query"], previous_query=previous,
-                reason=state.get("judge_reason") or "no relevant documents found",
-            )
-        )
+        out = config.get_llm().invoke(RAG_REFINE_PROMPT.format(
+            query=state["query"], previous_query=previous,
+            reason=state.get("judge_reason") or "no relevant documents found",
+        ))
         candidate = str(out.content).strip().strip('"').strip()
-        if candidate:
+        if candidate and candidate.lower() != previous.lower():
             new_query = candidate
     except Exception:
         pass
-    return {
-        "search_query": new_query,
-        "retry_count": state.get("retry_count", 0) + 1,
-        "status": "refined",
-    }
+    return {"search_query": new_query, "retry_count": state.get("retry_count", 0) + 1, "status": "refined"}
 
 
 def route_after_judge(state: RAGState):
@@ -90,7 +75,7 @@ def route_after_judge(state: RAGState):
         return "done"
     if state.get("retry_count", 0) < config.RAG_MAX_RETRIES:
         return "refine"
-    return "done"  # retries exhausted and still not relevant -> parent graph falls back to web
+    return "done"
 
 
 @lru_cache(maxsize=1)
@@ -99,7 +84,6 @@ def build_rag_subgraph():
     workflow.add_node("retrieve", retrieve_node)
     workflow.add_node("judge", judge_node)
     workflow.add_node("refine", refine_node)
-
     workflow.set_entry_point("retrieve")
     workflow.add_edge("retrieve", "judge")
     workflow.add_conditional_edges("judge", route_after_judge, {"refine": "refine", "done": END})
