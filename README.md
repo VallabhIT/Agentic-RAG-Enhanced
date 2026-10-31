@@ -1,19 +1,30 @@
 # Agentic RAG — Reliability, Evaluation & Cost-Aware Tool Use
 
-A small LangGraph assistant that demonstrates practical agent engineering: bounded routing, evidence-based RAG, guarded SQLite/Python tools, safe failure handling, and an offline evaluation set.
+A small LangGraph assistant that demonstrates practical agent engineering: bounded routing, hybrid RAG, guarded SQLite/Python tools, safe failure handling, and repeatable evaluation.
 
 The design intentionally stays simple:
 - **LangGraph** for orchestration and explicit state transitions.
-- **ChromaDB** for semantic search over agentic-RAG engineering knowledge.
-- **SQLite** for structured technology-department client deliverables.
-- **Notion** for authoring explanatory knowledge and managing the separate client-deliverables tracker.
+- **ChromaDB** for semantic + lexical hybrid retrieval over Notion/local knowledge.
+- **SQLite** for structured Technology Department client-deliverable records.
+- **Notion** for personal/project knowledge pages.
 - **Web/Python** only when the request needs those capabilities.
+
+## Current Notion knowledge sources
+
+The current workspace structure under **My Personal Things** contains separate pages for:
+- Agentic RAG — Project Notes & Integration Plan
+- Himachal Pradesh Winter Itinerary | 1–8 Jan 2027
+- Grocery Shopping List
+- Important Events in Indian History
+- Weekday routine
+
+The ingestion script handles headings, paragraphs, lists, code, callouts, task items, and Notion tables. Each page is supplied explicitly through `NOTION_PAGE_IDS`; the parent page is only a navigation page and does not need to be indexed. Do not put a client-deliverables database into the Notion ingestion list.
 
 ## Agent workflow
 
 ```
 new turn -> rewrite -> route
-                     |-- rag -> retrieve -> judge -> (bounded refine/retrieve)* -> finalize
+                     |-- rag -> hybrid retrieve -> judge -> (bounded refine/retrieve)* -> finalize
                      |                   -> insufficient -> web fallback -> finalize
                      |-- sql -> generate SQL -> safety guard -> execute -> finalize
                      |                           -> approval required -> pause/resume
@@ -23,70 +34,100 @@ new turn -> rewrite -> route
                      -- direct -> conversational response
 ```
 
-### Engineering decisions worth explaining in an interview
+## Hybrid retrieval
 
-**1. Failure modes are explicit**
+RAG retrieval uses two independent signals:
 
-- Invalid router JSON safely falls back to internal RAG rather than crashing.
-- RAG judges answer sufficiency, not topic similarity; retries are bounded by `RAG_MAX_RETRIES`.
-- Insufficient internal evidence triggers the existing web fallback.
-- SQL is executed as one statement; read-only `SELECT/WITH` uses a read-only SQLite connection.
-- Risky SQL and Python are paused for explicit approval. The execute node checks that the code still matches the exact approved payload.
-- Python runs in a separate subprocess with a timeout and scrubbed environment. This is process isolation, not a hardened sandbox.
-- Tool exceptions are surfaced as typed status/error information instead of silently inventing an answer.
+1. **Dense Chroma retrieval** for semantic paraphrases and conceptual similarity.
+2. **Corpus-wide BM25 lexical retrieval** for exact entities, names, years, numbers, quantities, units, and identifiers.
+3. **Weighted fusion** ranks the union of both result sets.
 
-**2. Routing is grounded in the actual sources**
+This matters for pages such as the grocery list and Indian history timeline, where queries containing `5 kg`, `2 L`, `1947`, or exact item/event names can be underweighted by embeddings alone.
 
-Obvious intent hints avoid a router LLM call for simple tracker reports, public freshness requests, and explicit standalone computations. Ambiguous queries go to the LLM router, which receives the live SQLite schema and a source-specific routing policy.
+Tune with:
 
-- Agentic RAG concepts, prompts, failure modes, evaluation, security, and optimization -> RAG.
-- Client deliverables, clients, workstreams, owners, status, blockers, progress, and due dates -> SQLite.
+```text
+RAG_TOP_K
+RAG_HYBRID_CANDIDATES
+RAG_HYBRID_VECTOR_WEIGHT
+RAG_HYBRID_LEXICAL_WEIGHT
+RAG_HYBRID_BM25_K1
+RAG_HYBRID_BM25_B
+```
+
+## Routing policy
+
+- Agentic RAG concepts, prompts, failure modes, evaluation, security, observability, and optimization -> RAG.
+- Personal/project knowledge from the indexed Notion pages -> RAG.
+- Client deliverables, owners, status, blockers, progress, and due dates -> SQLite.
 - Standalone computations/scripts -> Python.
 - Current public information -> Web.
 - Greetings/thanks -> Direct.
 
-The SQL generator receives only the live `client_deliverables` schema. It is not asked to invent customer/order tables.
+The router explicitly distinguishes conceptual questions from structured tracker requests, so a question like "What does blocked mean?" stays in RAG while "Show blocked deliverables" uses SQLite.
 
-**3. Evaluation is part of the workflow**
+## SQLite client-deliverables database
 
-`evals/routing_cases.json` is a small, versioned golden set. Offline tests cover deterministic route hints, ambiguous-vs-structured distinctions, prompt schema context, RAG retries/fallback, approval resume, SQL safety, and Python isolation.
+The project now owns a direct local database at `data/client_deliverables.sqlite`. Run:
 
-For a stronger evaluation report, add labeled expected evidence to the set and measure:
-- Route accuracy and per-route precision/recall/confusion matrix.
-- Retrieval Recall@k and MRR.
-- Answer faithfulness and citation coverage.
-- SQL execution correctness and safety-guard false positives/negatives.
-- Tool success rate, retry rate, and fallback correctness.
+```bash
+python -m scripts.init_sqlite
+```
 
-Do not report a model quality score from the deterministic hint tests; those tests cover only the inexpensive first routing layer. Evaluate the LLM router and final answers separately against the same golden queries when credentials are configured.
+The schema is `client_deliverables` with client, project, deliverable, workstream, owner, status, priority, due date, progress percentage, blocker, next action, last update, and `is_sample`.
 
-**4. Optimisation follows measurement**
+Seed rows are fictional illustrative records only. Replace them before using the application for real reporting. No PostgreSQL, external SQL server, Docker database, or Notion deliverables database is required.
 
-- Cache the embedding model and Chroma client.
-- Upsert only changed seed knowledge by content hash.
-- Keep top-k and context budgets bounded.
-- Avoid repeated LLM calls for obvious intents.
-- Use a small retry budget and stop when evidence is sufficient.
-- Prefer structural chunking and add reranking/semantic chunking only when evals demonstrate a retrieval failure.
-- Track p50/p95 latency and token usage per node before adding complexity.
+## Evaluation suite
 
-## Knowledge and structured data
+The repository separates evaluation by scope:
 
-### ChromaDB
-Stores explanatory material such as agentic workflow design, RAG retrieval, routing policy, tool safety, failure recovery, evaluation, observability, and cost optimization. Notion page title/section/URL provenance is carried into retrieved context.
+### Routing
 
-### SQLite
-Stores structured client-deliverable records in `client_deliverables`:
-- client, project, deliverable, workstream
-- owner, status, priority
-- due date, progress percentage
-- blocker/dependency, next action, last update
-- `is_sample`, which marks the seeded example records
+```bash
+python -m scripts.evaluate_routing
+```
 
-The initial rows are illustrative sample data, not actual client commitments. Replace them before using this as a real status report. No PostgreSQL, external SQL server, or Docker database service is required.
+Measures route accuracy, confusion counts, latency percentiles, invalid route outputs, and deterministic-router call avoidance.
 
-### Notion
-Use Notion for explanatory knowledge pages and the **Technology Department — Client Deliverables Tracker**. The tracker is operational data and should be queried as structured rows, not embedded as text in Chroma.
+### Retrieval
+
+```bash
+python -m scripts.evaluate_retrieval
+```
+
+Measures source-level Recall@k and MRR over `evals/retrieval_cases.json`.
+
+### RAG subgraph / DeepEval
+
+```bash
+python -m scripts.evaluate_rag
+```
+
+The RAG suite uses five complementary metrics:
+- **Contextual Precision** — whether relevant chunks are ranked early.
+- **Contextual Recall** — whether retrieved chunks contain the evidence needed by the reference answer.
+- **Contextual Relevancy** — how much of the retrieved context is relevant to the query.
+- **Faithfulness** — whether the generated answer is supported by retrieved context.
+- **Answer Relevancy** — whether the answer addresses the user's question.
+
+### Node-level checks
+
+```bash
+python -m scripts.evaluate_nodes
+```
+
+Covers SQL safety, Python safety, bounded RAG retry invariants, and rewrite preservation.
+
+### Application-level
+
+```bash
+python -m scripts.evaluate_pipeline
+```
+
+Runs the golden end-to-end cases and reports route accuracy, DeepEval Answer Relevancy, and Tool Correctness. Trajectory metrics such as Task Completion and Step Efficiency are intentionally deferred until runtime tracing is added; the project does not pretend to have a trajectory when it does not capture one.
+
+The goldens live under `evals/` and should be versioned with the application so prompt/retrieval changes can be regression-tested.
 
 ## Setup
 
@@ -96,40 +137,27 @@ source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 # Set OPENAI_API_KEY (or configure LLM_PROVIDER=ollama)
+python -m scripts.init_sqlite
 python -m app.main
 ```
 
-The SQLite deliverables table and illustrative rows are created automatically the first time the SQL schema is requested. The existing database path remains `data/demo.db`.
-
 ## Notion ingestion
 
-Create a local Notion integration, share the intended knowledge pages with it, and set `NOTION_TOKEN` and `NOTION_PAGE_IDS` in `.env`.
+Create a local Notion integration and share only the pages intended for ingestion. Set `NOTION_TOKEN` and the comma-separated `NOTION_PAGE_IDS` in `.env`.
 
 ```bash
-python -m scripts.notion_to_chroma --page-ids YOUR_NOTION_PAGE_ID
+python -m scripts.notion_to_chroma
 ```
 
-This writes explanatory page chunks into the existing Chroma `knowledge_base` collection. Do not pass the client-deliverables database rows as RAG documents.
-
-## Evaluation and offline tests
-
-Run the live routing evaluation after configuring the existing LLM provider. The report includes route accuracy, per-route confusion counts, latency percentiles, invalid outputs, and the fraction of calls avoided by deterministic hints:
-
-```bash
-python -m scripts.evaluate_routing
-```
-
-This evaluates routing only; it does not claim to measure retrieval quality or answer faithfulness. The offline tests cover deterministic hints and the graph's retry, fallback, approval, SQL safety, and Python isolation behavior:
-
-```bash
-python -m pytest tests -q
-```
+The current `.env.example` lists the five knowledge pages from the workspace. The parent **My Personal Things** page is intentionally not indexed because it is only a navigation page. Re-run the sync after a Notion edit; unchanged pages are skipped using content hashes.
 
 ## Example questions
 
-- "How should an agent recover from irrelevant RAG results?" (RAG)
-- "How do I evaluate retrieval faithfulness and citation coverage?" (RAG)
-- "Show blocked deliverables for Northstar Logistics." (SQLite)
-- "Which deliverables are due this week?" (SQLite)
+- "Why does hybrid retrieval help with exact numbers?" (RAG)
+- "How much rice and cooking oil are on my grocery list?" (RAG)
+- "What happened in 1947 in my history timeline?" (RAG)
+- "What is planned for Day 4 of my Himachal itinerary?" (RAG)
+- "What is in my weekday routine at 8:30 AM?" (RAG)
+- "Show blocked deliverables." (SQLite)
 - "Compute precision, recall, and F1 for TP=42, FP=8, FN=5." (Python)
 - "What is the latest public LangGraph release?" (Web)
