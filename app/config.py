@@ -9,17 +9,22 @@ load_dotenv()
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
 VECTORSTORE_PATH = Path(os.getenv("VECTORSTORE_PATH", str(DATA_DIR / "chroma")))
-SQLITE_DB_PATH = DATA_DIR / "demo.db"
+SQLITE_DB_PATH = Path(os.getenv("SQLITE_DB_PATH", str(DATA_DIR / "client_deliverables.sqlite")))
 
 # ---- Pipeline tunables (all overridable via environment) -------------------
-RAG_MAX_RETRIES = int(os.getenv("RAG_MAX_RETRIES", "2"))            # refinement retries after the 1st retrieval
+RAG_MAX_RETRIES = int(os.getenv("RAG_MAX_RETRIES", "2"))
 RAG_RELEVANCE_THRESHOLD = float(os.getenv("RAG_RELEVANCE_THRESHOLD", "0.5"))
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
+RAG_HYBRID_CANDIDATES = int(os.getenv("RAG_HYBRID_CANDIDATES", "20"))
+RAG_HYBRID_VECTOR_WEIGHT = float(os.getenv("RAG_HYBRID_VECTOR_WEIGHT", "0.65"))
+RAG_HYBRID_LEXICAL_WEIGHT = float(os.getenv("RAG_HYBRID_LEXICAL_WEIGHT", "0.35"))
+RAG_HYBRID_BM25_K1 = float(os.getenv("RAG_HYBRID_BM25_K1", "1.2"))
+RAG_HYBRID_BM25_B = float(os.getenv("RAG_HYBRID_BM25_B", "0.75"))
 WEB_MAX_RESULTS = int(os.getenv("WEB_MAX_RESULTS", "5"))
-MAX_TOOL_CHARS = int(os.getenv("MAX_TOOL_CHARS", "12000"))          # cap on tool output sent to the finalize LLM
+MAX_TOOL_CHARS = int(os.getenv("MAX_TOOL_CHARS", "12000"))
 PYTHON_TIMEOUT_SECONDS = int(os.getenv("PYTHON_TIMEOUT_SECONDS", "10"))
 SQL_MAX_ROWS = int(os.getenv("SQL_MAX_ROWS", "200"))
-HISTORY_WINDOW = int(os.getenv("HISTORY_WINDOW", "6"))              # prior messages used for context
+HISTORY_WINDOW = int(os.getenv("HISTORY_WINDOW", "6"))
 RECURSION_LIMIT = int(os.getenv("RECURSION_LIMIT", "40"))
 
 
