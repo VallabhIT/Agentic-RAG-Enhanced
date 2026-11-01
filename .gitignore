@@ -1,0 +1,9 @@
+__pycache__/
+.pytest_cache/
+.venv/
+.env
+*.pyc
+data/chroma/
+data/client_deliverables.sqlite
+scripts/__pycache__/
+tests/__pycache__
